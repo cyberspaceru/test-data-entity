@@ -6,8 +6,12 @@ import ru.sbt.qa.tde.processors.BaseDataProcessor;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.util.Optional.of;
 import static java.util.Optional.ofNullable;
@@ -25,16 +29,46 @@ public class Entities {
     }
 
     public static void add(ILoader loader, IDataProcessor dataProcessor, String entitiesPackage) {
-        List<RowEntity> rowEntityList = loader.load();
-        if (rowEntityList != null) {
-            MManager.execute(from(rowEntityList), x -> createEntity(x, dataProcessor, entitiesPackage))
+        List<RudeEntity> rudeEntityList = loader.load();
+        if (rudeEntityList != null) {
+            MManager.execute(from(rudeEntityList), x -> createEntity(x, dataProcessor, entitiesPackage))
                     .subscribe(x -> ofNullable(x).map(entities::add));
         }
     }
 
-    public static <T> T get(Class<T> tClass, String name) {
+    public static <T> Stream<T> entities(Class<T> tClass) {
+        return ofNullable(getAll(tClass)).map(List::stream).orElse(null);
+    }
+
+    public static <T> List<T> getAllByPredicate(Class<T> tClass, Predicate<T> objectPredicate) {
+        List<T> result = entities.stream().filter(x ->  x.getObject().getClass().equals(tClass))
+                .map(Entity::getObject)
+                .map(x -> (T) x)
+                .filter(objectPredicate)
+                .collect(Collectors.toList());
+        return of(result).filter(x -> x.size() != 0).orElse(null);
+    }
+
+    public static <T> List<T> getAll(Class<T> tClass) {
+        List<T> result = entities.stream().filter(x ->  x.getObject().getClass().equals(tClass))
+                .map(Entity::getObject)
+                .map(x -> (T) x)
+                .collect(Collectors.toList());
+        return of(result).filter(x -> x.size() != 0).orElse(null);
+    }
+
+    public static <T> List<T> getAll(Class<T> tClass, Predicate<String> namePredicate) {
+        List<T> result = entities.stream().filter(x ->  x.getObject().getClass().equals(tClass))
+                .filter(x -> namePredicate.test(x.getName()))
+                .map(Entity::getObject)
+                .map(x -> (T) x)
+                .collect(Collectors.toList());
+        return of(result).filter(x -> x.size() != 0).orElse(null);
+    }
+
+    public static <T> T getFirst(Class<T> tClass, String name) {
         return entities.stream().filter(x ->  x.getObject().getClass().equals(tClass))
-                .filter(x -> x.getName().equals(name))
+                .filter(x -> x.getName() != null && x.getName().equals(name))
                 .distinct()
                 .findFirst()
                 .map(Entity::getObject)
@@ -52,15 +86,15 @@ public class Entities {
     }
 
     public static Object getFirst(String name) {
-        return entities.stream().filter(x -> x.getName().equals(name))
+        return entities.stream().filter(x -> x.getName() != null && x.getName().equals(name))
                 .distinct()
                 .findFirst()
                 .map(Entity::getObject)
                 .orElse(null);
     }
 
-    private static Entity createEntity(RowEntity rowEntity, IDataProcessor dataProcessor, String entitiesPackage) {
-        String absolutePackage = entitiesPackage + "." + rowEntity.getRelativeClassPackage();
+    private static Entity createEntity(RudeEntity rudeEntity, IDataProcessor dataProcessor, String entitiesPackage) {
+        String absolutePackage = entitiesPackage + "." + rudeEntity.getRelativeClassPackage();
         Set<Class<?>> set = new Reflections(absolutePackage).getTypesAnnotatedWith(TestData.class);
         if (set == null || set.size() != 1) {
             Logger.getRootLogger().error(absolutePackage + " not found.");
@@ -69,19 +103,22 @@ public class Entities {
         return of(set).map(x -> x.iterator().next())
                 .map(x -> {
                     try {
-                        final Entity result = new Entity(rowEntity.getName(), x.newInstance());
+                        final Entity result = new Entity(rudeEntity.getName(), x.newInstance());
                         // Для каждого значения "Имя поля":
-                        rowEntity.getFieldsName().forEach(fieldName -> {
+                        rudeEntity.getFieldsName().forEach(fieldName -> {
                             Field field = null;
                             try {
                                 // Находим поле, которое соотвествует значению "Имя поля"
                                 Object object = result.getObject();
-                                field = object.getClass().getDeclaredField(fieldName);
-                                field.set(object, dataProcessor.process(rowEntity.getFieldValue(fieldName), field));
+                                field = getAllFields(object.getClass()).stream()
+                                        .filter(n -> n.getName().equals(fieldName))
+                                        .findFirst()
+                                        .orElseThrow(NoSuchFieldException::new);
+                                field.set(object, dataProcessor.process(rudeEntity.getFieldValue(fieldName), field));
                             } catch (NoSuchFieldException e) {
-                                Logger.getRootLogger().error("Can't find the field with name: " + fieldName);
+                                Logger.getRootLogger().error("Can't find the field with name: " + fieldName + " for \"" + x + "\"");
                             } catch (IllegalAccessException e) {
-                                Logger.getRootLogger().error("Field with name \""+ fieldName + "\"" + " must be PUBLIC in order to set value: " + rowEntity.getFieldValue(fieldName));
+                                Logger.getRootLogger().error("Field with name \""+ fieldName + "\"" + " must be PUBLIC in order to set value: " + rudeEntity.getFieldValue(fieldName));
                             } catch (IllegalArgumentException e) {
                                 Logger.getRootLogger().error("Field with name \""+ fieldName + "\": " + e.getMessage());
                             } catch (Exception e) {
@@ -91,11 +128,18 @@ public class Entities {
 
                         return result;
                     } catch (Exception e) {
-                        Logger.getRootLogger().error("Can't create an entity from \""+ absolutePackage + "\": " + e.getMessage());
+                        Logger.getRootLogger().error("Can't create an entity of \""+ absolutePackage + "\": " + e.getMessage());
                         return null;
                     }
                 })
                 .orElse(null);
+    }
+
+    private static List<Field> getAllFields(Class<?> type) {
+        List<Field> fields = new ArrayList<Field>();
+        for (Class<?> c = type; c != null; c = c.getSuperclass())
+            fields.addAll(Arrays.asList(c.getDeclaredFields()));
+        return fields;
     }
 
 }

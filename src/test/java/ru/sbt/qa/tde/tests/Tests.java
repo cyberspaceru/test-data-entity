@@ -16,15 +16,15 @@ import java.io.File;
 public class Tests {
 
     @Test
-    public void loadingTest() {
+    public void xlsxLoaderTest() {
         XLSXLoader loader = new XLSXLoader(new File("").getAbsolutePath() + "\\src\\test\\resources\\example.xlsx");
         Entities.add(loader, "ru.sbt.qa.tde.entities");
 
         Assert.assertTrue(checkUserAsAdmin((User)Entities.getFirst("Admin")));
 
-        Assert.assertTrue(checkUserAsAdmin(Entities.get(User.class, "Admin")));
+        Assert.assertTrue(checkUserAsAdmin(Entities.getFirst(User.class, "Admin")));
 
-        Assert.assertTrue(checkUserAsAdmin2(Entities.get(User.class, "Admin2")));
+        Assert.assertTrue(checkUserAsAdmin2(Entities.getFirst(User.class, "Admin2")));
 
         Assert.assertTrue(checkShippingForm(Entities.getFirst(ShippingForm.class)));
 

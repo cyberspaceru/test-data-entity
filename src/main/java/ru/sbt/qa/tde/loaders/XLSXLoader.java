@@ -6,7 +6,7 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import ru.sbt.qa.tde.core.ILoader;
-import ru.sbt.qa.tde.core.RowEntity;
+import ru.sbt.qa.tde.core.RudeEntity;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -30,10 +30,10 @@ public class XLSXLoader implements ILoader {
         this.pathname = pathname;
     }
 
-    public List<RowEntity> load() {
+    public List<RudeEntity> load() {
         return ofNullable(getWorkbook(pathname))
                 .map(x -> {
-                    List<RowEntity> result = new ArrayList<>();
+                    List<RudeEntity> result = new ArrayList<>();
                     for (int i = 0; i < x.getNumberOfSheets(); i++) {
                         result.addAll(ofNullable(getRowEntitiesBySheet(x.getSheetAt(i)))
                                 .orElse(new ArrayList<>()));
@@ -43,7 +43,7 @@ public class XLSXLoader implements ILoader {
                 .orElse(null);
     }
 
-    private List<RowEntity> getRowEntitiesBySheet(XSSFSheet sheet) {
+    private List<RudeEntity> getRowEntitiesBySheet(XSSFSheet sheet) {
         Stream<Row> rowStream = ofNullable(sheet)
                 .map(XSSFSheet::iterator)
                 .map(x -> StreamSupport.stream(Spliterators.spliteratorUnknownSize(x, Spliterator.ORDERED),false))
@@ -51,7 +51,7 @@ public class XLSXLoader implements ILoader {
         return ofNullable(rowStream)
                 .map(x -> {
 
-                    final List<RowEntity> result = new ArrayList<>();
+                    final List<RudeEntity> result = new ArrayList<>();
                     x.forEach(row -> {
                         final String firstCellValue = getCellValue(row.getCell(0));
                         if (ofNullable(firstCellValue).filter(v -> v.contains("*")).map(v -> true).orElse(false)) {
@@ -59,7 +59,7 @@ public class XLSXLoader implements ILoader {
                             final Cell entityCell = row.getCell(0);
                             final Cell entityInstanceNameCell = row.getCell(1);
                             // Создаем новую сущность
-                            result.add(new RowEntity(getCellValue(entityCell), getCellValue(entityInstanceNameCell)));
+                            result.add(new RudeEntity(getCellValue(entityCell).replace("*", ""), getCellValue(entityInstanceNameCell)));
                         }
                         else {
                             // Если эта строка с объявлением Поля Сущности
