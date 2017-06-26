@@ -46,7 +46,7 @@ public class RudeEntity {
 
     public boolean addField(String fieldName, String fieldValue) {
         Pair<String, String> pair = new Pair<>(fieldName, fieldValue);
-        return of(pair).filter(x -> !x.getKey().isEmpty() && x.getKey() != null && x.getValue() != null)
+        return of(pair).filter(x ->  x.getKey() != null && !x.getKey().isEmpty())
                 .map(x -> fields.put(x.getKey().trim(), x.getValue()))
                 .map(x -> true)
                 .orElse(false);
