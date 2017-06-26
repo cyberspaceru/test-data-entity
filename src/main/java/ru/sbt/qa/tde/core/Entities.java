@@ -28,6 +28,10 @@ public class Entities {
         add(loader, new BaseDataProcessor(), entitiesPackage);
     }
 
+    public static Integer count() {
+        return of(entities).map(x -> entities.size()).orElse(0);
+    }
+
     public static void add(ILoader loader, IDataProcessor dataProcessor, String entitiesPackage) {
         List<RudeEntity> rudeEntityList = loader.load();
         if (rudeEntityList != null) {
